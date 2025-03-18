@@ -14,5 +14,4 @@
 
 ## Example Data 
 
-The data used in the publication is stored in the logs folder. 
-It originates from doi.org/10.6084/m9.figshare.12543587
+The data used in the publication is stored in the folder titled "Leno" as the logs were published by Leno et al. and originate from doi.org/10.6084/m9.figshare.12543587
