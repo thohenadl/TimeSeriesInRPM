@@ -7,6 +7,9 @@ import numpy as np
 from scipy.sparse.linalg import eigsh
 from scipy.sparse import csr_matrix
 
+from gensim.models import Word2Vec
+from sklearn.preprocessing import LabelEncoder
+
 import stumpy
 import ast
 
@@ -42,7 +45,7 @@ def encoding_UiLog(uiLog: pd.DataFrame, orderedColumnsList: list= ["category","a
     Parameters:
       uiLog (pd.DataFrame): Dataframe containing the UI Log
       orderedColumnsList (List / Default SmartRPA Columns): Ordered List of columns containing the attributes from the UI Log
-      encoding (Int / Default 1): Encoding Method to be used (1=Hierarchy Encoding, 2=Co-Occurrance Encoding, 3=Hot Ecnoding)
+      encoding (Int / Default 1): Encoding Method to be used (1=Hierarchy Encoding, 2=Co-Occurrance Encoding, 3=Hot Encoding, 4= Column Based Hot Encoding)
       cooccurance_distance (Int / Default 2): Distance to be considered for the co-occurrance matrix counting
       coocurance_combined (Bool / Default True): If the columns for cooccurance should be combined into a single value
 
@@ -147,7 +150,7 @@ def encoding_UiLog(uiLog: pd.DataFrame, orderedColumnsList: list= ["category","a
             
       # uiLog['tuple:id'] = uiLog.apply(lambda row: get_id(row, tuples, columns=['concept:name:id','application:id', 'category:id']), axis=1)
     
-    elif encoding == 3: # Continuous Hot Encoding
+    elif encoding == 3: # Continuous String Hot Encoding
       # Create a single combined column to represent the unique combination
       combined = uiLog[orderedColumnsList].astype(str).agg('|'.join, axis=1)
       
@@ -155,8 +158,24 @@ def encoding_UiLog(uiLog: pd.DataFrame, orderedColumnsList: list= ["category","a
       uiLog['tuple:id'] = pd.factorize(combined)[0]
       return uiLog
     
+    elif encoding == 4: # Hot Encoding Using Column Label encoding first
+      # Encode each column using label encoding
+      encoded_cols = []
+      for col in orderedColumnsList:
+        le = LabelEncoder()
+        encoded_col_name = f"{col}_le"
+        uiLog[encoded_col_name] = le.fit_transform(uiLog[col].astype(str))
+        encoded_cols.append(encoded_col_name)
+
+      # Factorize unique combinations of encoded columns
+      uiLog['tuple:id'] = pd.factorize(pd.Series([tuple(row) for row in uiLog[encoded_cols].values]))[0]
+
+      return uiLog
+    
     else:
       raise ValueError("Encoding method not supported. Please select a valid encoding method.")
+
+
 
 # ---- Motif Discovery ----
 
@@ -789,3 +808,102 @@ def compare_sets(set1, set2, n):
         break  # Avoid duplicates if multiple values in set2 are within range
 
   return identified_values, motif_values, set_matches
+
+# Additions to improve paper after reviewer feedback
+
+def compare_sets_IoU(set1, set2, window_size, iou_threshold=0.5):
+    """
+    Compare two sets of motif start indices based on overlap (IoU = Intersection over Union) between discovered and ground truth motifs.
+
+    Args:
+        set1: Ground truth motif start indices.
+        set2: Discovered motif start indices.
+        window_size: The size of the window used to extract motifs (defines motif length).
+        iou_threshold: Minimum IoU required to consider a match as a true positive.
+
+    Returns:
+        identified_values: Ground truth indices matched.
+        motif_values: Discovered indices matched.
+        set_matches: DataFrame containing matches with their IoU score.
+    """
+    set_matches = pd.DataFrame(columns=["originalMotif", "discoveredMotif", "IoU"])
+    identified_values = []
+    motif_values = []
+
+    for gt_start in set1:
+        gt_end = gt_start + window_size
+        
+        for disc_start in set2:
+            disc_end = disc_start + window_size
+
+            # Calculate Intersection
+            intersection_start = max(gt_start, disc_start)
+            intersection_end = min(gt_end, disc_end)
+            intersection = max(0, intersection_end - intersection_start)
+
+            # Calculate Union
+            union = (gt_end - gt_start) + (disc_end - disc_start) - intersection
+
+            # Calculate IoU
+            iou = intersection / union if union > 0 else 0
+
+            if iou >= iou_threshold:
+                identified_values.append(gt_start)
+                motif_values.append(disc_start)
+                dict1 = {"originalMotif": gt_start, "discoveredMotif": disc_start, "IoU": iou}
+                set_matches = set_matches._append(dict1, ignore_index=True)
+                break  # Only allow one discovery per ground truth
+
+    return identified_values, motif_values, set_matches
+
+# Replaces encoding_uiLog function to use word2vec method with single sentence
+def encode_word2vec(uiLog: pd.DataFrame, orderedColumnsList: list, vector_size: int = 32, window: int = 5, min_count: int = 1) -> pd.DataFrame:
+    """
+    Applies Word2Vec embedding to concatenated column values from the UI log to generate a continuous vector encoding.
+    Adds vector components as new columns to the DataFrame.
+
+    Args:
+        uiLog (pd.DataFrame): The UI log DataFrame.
+        orderedColumnsList (list): Columns to concatenate as tokens for Word2Vec.
+        vector_size (int): Dimensionality of the Word2Vec vectors.
+        window (int): Window size for Word2Vec.
+        min_count (int): Minimum count for a token to be included in training.
+
+    Returns:
+        pd.DataFrame: DataFrame with Word2Vec embedding vectors added.
+    """
+    df = uiLog.copy()
+
+    # Create a single token per row by concatenating selected column values
+    token_series = df[orderedColumnsList].astype(str).agg('|'.join, axis=1)
+
+    # Prepare sentences as sequences (mocking process traces using a sliding window approach)
+    # For simplicity, treat the entire series as one text to be discovered
+    sentences = [token_series.tolist()]
+
+    # Train Word2Vec model
+    model = Word2Vec(sentences, vector_size=vector_size, window=window, min_count=min_count, sg=1)
+
+    # Map each token back to its vector
+    vectors = token_series.apply(lambda token: model.wv[token] if token in model.wv else [0.0]*vector_size)
+    vector_df = pd.DataFrame(vectors.tolist(), index=df.index)
+    vector_df.columns = [f'w2v_{i}' for i in range(vector_size)]
+
+    # Combine original DataFrame with vector representation
+    result_df = pd.concat([df, vector_df], axis=1)
+
+    return result_df
+
+# Replaces discover_motifs method for word2vec based encoded ui log and uses multi dimension motif discovery
+def mine_w2v(uiLog_w2v,window_size: int = 30, no_of_motifs: int = 10):
+    w2v_columns = [col for col in uiLog_w2v.columns if col.startswith('w2v_')]
+    time_series_data = uiLog_w2v[w2v_columns].values.T.astype(np.float64)  # shape: (dimensions, time)
+
+    p_mult_matrix_profil, i_multi_motif_indexes = stumpy.mstump(time_series_data, m=window_size)
+
+    # https://stumpy.readthedocs.io/en/latest/api.html#mmotifs
+    motif_distances, motif_indices, motif_subspaces, motif_mdls = stumpy.mmotifs(time_series_data,p_mult_matrix_profil,
+                                                                                 i_multi_motif_indexes, max_matches=no_of_motifs)
+    # Identify the top-1 motif pair
+    
+    return motif_distances, motif_indices, motif_subspaces, motif_mdls
