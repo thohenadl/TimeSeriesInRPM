@@ -907,3 +907,18 @@ def mine_w2v(uiLog_w2v,window_size: int = 30, no_of_motifs: int = 10):
     # Identify the top-1 motif pair
     
     return motif_distances, motif_indices, motif_subspaces, motif_mdls
+
+# ---- Generate Ground Truth ----
+def generate_caseid_list(df: pd.DataFrame) -> list[int]:
+    """
+    Generates a list of tuples where each tuple contains a caseid and the row index where that caseid is first encountered.
+    """
+    caseid_list_with_indices = []
+    seen_caseids = set()  # To keep track of the caseid values we've already encountered
+    
+    for index, caseid in df['caseid'].items():
+        if pd.notna(caseid) and caseid not in seen_caseids:
+            caseid_list_with_indices.append(index)
+            seen_caseids.add(caseid)  # Add caseid to the set to track it
+    
+    return caseid_list_with_indices

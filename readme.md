@@ -8,7 +8,8 @@
 3. pip install the requirments.txt
 
 4. Use VS code to clone the repository
-5. Open the Jupyter Notebook
+5. A) Re-Produce the Experiment: Open the Jupyter Notebook "BPM_Tech_Forum" and execute as-is. Use the filenames "experiment_extended_SR_RT_joint.csv" and "experiment_extended_SR_RT_parallel.csv"
+5. B) Run your own experiment: Execute the "Extended_Log_Creation" Notebook. Afterwards adjust the csv-read statement in the "BPM_Tech_Forum" notebook.
 6. On the first run of the notebook select the Python environment
 7. Enjoy using
 
