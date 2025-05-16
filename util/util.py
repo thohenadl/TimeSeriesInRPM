@@ -811,50 +811,69 @@ def compare_sets(set1, set2, n):
 
 # Additions to improve paper after reviewer feedback
 
-def compare_sets_IoU(set1, set2, window_size, iou_threshold=0.5):
+def compute_discovery_coverage(gt_tuples, discovered_starts, window_size, threshold=0.5):
     """
-    Compare two sets of motif start indices based on overlap (IoU = Intersection over Union) between discovered and ground truth motifs.
+    For each discovered motif start, compute whether it sufficiently covers a ground truth motif.
 
     Args:
-        set1: Ground truth motif start indices.
-        set2: Discovered motif start indices.
-        window_size: The size of the window used to extract motifs (defines motif length).
-        iou_threshold: Minimum IoU required to consider a match as a true positive.
+        discovered_starts: List of indices from motif discovery (set_1).
+        gt_tuples: List of (caseid, start, length) tuples for real motifs (set_2).
+        window_size: Length of discovered motif window.
+        threshold: Minimum coverage required to count as a true positive.
 
     Returns:
-        identified_values: Ground truth indices matched.
-        motif_values: Discovered indices matched.
-        set_matches: DataFrame containing matches with their IoU score.
+        DataFrame with columns: ['discoveredMotif', 'coveredGroundTruth', 'coverage']
+        Only rows with coverage >= threshold are returned.
     """
-    set_matches = pd.DataFrame(columns=["originalMotif", "discoveredMotif", "IoU"])
-    identified_values = []
-    motif_values = []
+    results = []
 
-    for gt_start in set1:
-        gt_end = gt_start + window_size
+    for disc_start in discovered_starts:
         
-        for disc_start in set2:
-            disc_end = disc_start + window_size
+        disc_end = disc_start + window_size
+        best_coverage = 0
+        best_gt = None
 
-            # Calculate Intersection
-            intersection_start = max(gt_start, disc_start)
-            intersection_end = min(gt_end, disc_end)
-            intersection = max(0, intersection_end - intersection_start)
+        for caseid, gt_start, gt_length in gt_tuples:
+            gt_end = gt_start + gt_length
 
-            # Calculate Union
-            union = (gt_end - gt_start) + (disc_end - disc_start) - intersection
+            # Compute overlap
+            overlap_start = max(disc_start, gt_start)
+            overlap_end = min(disc_end, gt_end)
+            overlap = max(0, overlap_end - overlap_start)
+        
+            if overlap == 0:
+                coverage = 0.0
+            elif gt_start >= disc_start and gt_end <= disc_end:
+                # Ground truth is completely within the discovered motif
+                coverage = 1.0
+            elif disc_start >= gt_start and disc_end <= gt_end:
+                # Discovered motif is completely within the ground truth
+                coverage = 1.0
+            else:
+                # Compute coverage (capped at 1.0)
+                coverage = min(1.0, overlap / window_size)
 
-            # Calculate IoU
-            iou = intersection / union if union > 0 else 0
+            if coverage > best_coverage:
+                best_coverage = coverage
+                best_gt = (caseid, gt_start, gt_end)
+        
+        # Only include results with sufficient coverage
+        if best_coverage >= threshold:
+            results.append({
+                'discoveredMotif': disc_start,
+                'coveredGroundTruth': best_gt,
+                'coverage': best_coverage
+            })
 
-            if iou >= iou_threshold:
-                identified_values.append(gt_start)
-                motif_values.append(disc_start)
-                dict1 = {"originalMotif": gt_start, "discoveredMotif": disc_start, "IoU": iou}
-                set_matches = set_matches._append(dict1, ignore_index=True)
-                break  # Only allow one discovery per ground truth
+    resultsDF = pd.DataFrame(results)
 
-    return identified_values, motif_values, set_matches
+    # Potential Bug as we might not have discoveredMotif in the results
+    if resultsDF.empty:
+        print("No discovered motifs with sufficient coverage found.")
+        return pd.Series(dtype=int), pd.Series(dtype=object), pd.DataFrame(columns=["discoveredMotif", "coveredGroundTruth", "coverage"])
+    else:
+        return resultsDF["discoveredMotif"], resultsDF["coveredGroundTruth"], resultsDF
+
 
 # Replaces encoding_uiLog function to use word2vec method with single sentence
 def encode_word2vec(uiLog: pd.DataFrame, orderedColumnsList: list, vector_size: int = 32, window: int = 5, min_count: int = 1) -> pd.DataFrame:
@@ -909,16 +928,19 @@ def mine_w2v(uiLog_w2v,window_size: int = 30, no_of_motifs: int = 10):
     return motif_distances, motif_indices, motif_subspaces, motif_mdls
 
 # ---- Generate Ground Truth ----
-def generate_caseid_list(df: pd.DataFrame) -> list[int]:
+def generate_caseid_list(df: pd.DataFrame, column = "caseid") -> list[int]:
     """
-    Generates a list of tuples where each tuple contains a caseid and the row index where that caseid is first encountered.
+    Generates a list of tuples where each tuple contains a caseid and the row index where that caseid is first encountered, and the case length.
     """
-    caseid_list_with_indices = []
-    seen_caseids = set()  # To keep track of the caseid values we've already encountered
-    
-    for index, caseid in df['caseid'].items():
-        if pd.notna(caseid) and caseid not in seen_caseids:
-            caseid_list_with_indices.append(index)
-            seen_caseids.add(caseid)  # Add caseid to the set to track it
-    
-    return caseid_list_with_indices
+    results = []
+
+    # Drop NA values in the target column
+    non_empty = df[~df[column].isna()].copy()
+
+    # Group by unique non-empty caseid values
+    for caseid, group in non_empty.groupby(column):
+        first_index = group.index[0]
+        row_count = len(group)
+        results.append((caseid, first_index, row_count))
+
+    return results
