@@ -11,6 +11,7 @@ from gensim.models import Word2Vec
 from sklearn.preprocessing import LabelEncoder
 
 import stumpy
+from stumpy import config
 import ast
 
 # ---- Tuple Generation for Time Series Data Creation ----
@@ -855,13 +856,19 @@ def compute_discovery_coverage(gt_tuples, discovered_starts, window_size, thresh
 
             if coverage > best_coverage:
                 best_coverage = coverage
-                best_gt = (caseid, gt_start, gt_end)
+                best_gt_case_id = caseid
+                best_gt_start = gt_start
+                best_gt_end = gt_end
+                best_gt_length = gt_length
         
         # Only include results with sufficient coverage
         if best_coverage >= threshold:
             results.append({
                 'discoveredMotif': disc_start,
-                'coveredGroundTruth': best_gt,
+                'coveredGroundTruth_case_id': best_gt_case_id,
+                'groundTruthStart': best_gt_start,
+                'groundTruthEnd': best_gt_end,
+                'groundTruthLength': best_gt_length,
                 'coverage': best_coverage
             })
 
@@ -872,7 +879,7 @@ def compute_discovery_coverage(gt_tuples, discovered_starts, window_size, thresh
         print("No discovered motifs with sufficient coverage found.")
         return pd.Series(dtype=int), pd.Series(dtype=object), pd.DataFrame(columns=["discoveredMotif", "coveredGroundTruth", "coverage"])
     else:
-        return resultsDF["discoveredMotif"], resultsDF["coveredGroundTruth"], resultsDF
+        return resultsDF["groundTruthStart"], resultsDF["discoveredMotif"], resultsDF
 
 
 # Replaces encoding_uiLog function to use word2vec method with single sentence
@@ -917,13 +924,13 @@ def encode_word2vec(uiLog: pd.DataFrame, orderedColumnsList: list, vector_size: 
 def mine_w2v(uiLog_w2v,window_size: int = 30, no_of_motifs: int = 10):
     w2v_columns = [col for col in uiLog_w2v.columns if col.startswith('w2v_')]
     time_series_data = uiLog_w2v[w2v_columns].values.T.astype(np.float64)  # shape: (dimensions, time)
+    config.STUMPY_EXCL_ZONE_DENOM = 1  # The exclusion zone is i ± window_size
 
     p_mult_matrix_profil, i_multi_motif_indexes = stumpy.mstump(time_series_data, m=window_size)
 
     # https://stumpy.readthedocs.io/en/latest/api.html#mmotifs
     motif_distances, motif_indices, motif_subspaces, motif_mdls = stumpy.mmotifs(time_series_data,p_mult_matrix_profil,
                                                                                  i_multi_motif_indexes, max_matches=no_of_motifs)
-    # Identify the top-1 motif pair
     
     return motif_distances, motif_indices, motif_subspaces, motif_mdls
 
