@@ -14,6 +14,14 @@ import stumpy
 from stumpy import config
 import ast
 
+import umap
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler
+
+import matplotlib as plt
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 # ---- Tuple Generation for Time Series Data Creation ----
 def createDict(someSet) -> dict:
     theDict = {}
@@ -920,19 +928,40 @@ def encode_word2vec(uiLog: pd.DataFrame, orderedColumnsList: list, vector_size: 
 
     return result_df
 
-# Replaces discover_motifs method for word2vec based encoded ui log and uses multi dimension motif discovery
-def mine_w2v(uiLog_w2v,window_size: int = 30, no_of_motifs: int = 10):
+def compute_matrix_profile(uiLog_w2v, window_size: int):
     w2v_columns = [col for col in uiLog_w2v.columns if col.startswith('w2v_')]
     time_series_data = uiLog_w2v[w2v_columns].values.T.astype(np.float64)  # shape: (dimensions, time)
-    config.STUMPY_EXCL_ZONE_DENOM = 1  # The exclusion zone is i ± window_size
-
+    config.STUMPY_EXCL_ZONE_DENOM = 1
     p_mult_matrix_profil, i_multi_motif_indexes = stumpy.mstump(time_series_data, m=window_size)
+    return  time_series_data, p_mult_matrix_profil, i_multi_motif_indexes
 
-    # https://stumpy.readthedocs.io/en/latest/api.html#mmotifs
-    motif_distances, motif_indices, motif_subspaces, motif_mdls = stumpy.mmotifs(time_series_data,p_mult_matrix_profil,
-                                                                                 i_multi_motif_indexes, max_matches=no_of_motifs)
-    
+def extract_motifs(time_series_data, matrix_profile, motif_indexes, no_of_motifs: int):
+    motif_distances, motif_indices, motif_subspaces, motif_mdls = stumpy.mmotifs(
+        time_series_data,
+        matrix_profile,
+        motif_indexes,
+        max_matches=no_of_motifs
+    )
     return motif_distances, motif_indices, motif_subspaces, motif_mdls
+
+def mine_w2v(uiLog_w2v, window_size: int = 30, no_of_motifs: int = 10):
+    time_series_data, p_mult_matrix_profil, i_multi_motif_indexes = compute_matrix_profile(uiLog_w2v, window_size)
+    return extract_motifs(time_series_data, p_mult_matrix_profil, i_multi_motif_indexes, no_of_motifs)
+
+# Replaces discover_motifs method for word2vec based encoded ui log and uses multi dimension motif discovery
+# def mine_w2v(uiLog_w2v,window_size: int = 30, no_of_motifs: int = 10):
+#     w2v_columns = [col for col in uiLog_w2v.columns if col.startswith('w2v_')]
+#     time_series_data = uiLog_w2v[w2v_columns].values.T.astype(np.float64)  # shape: (dimensions, time)
+#     config.STUMPY_EXCL_ZONE_DENOM = 1  # The exclusion zone is i ± window_size
+#     p_mult_matrix_profil, i_multi_motif_indexes = stumpy.mstump(time_series_data, m=window_size) 
+    
+#     # https://stumpy.readthedocs.io/en/latest/api.html#mmotifs
+#     motif_distances, motif_indices, motif_subspaces, motif_mdls = stumpy.mmotifs(
+#         time_series_data,
+#         p_mult_matrix_profil,
+#         i_multi_motif_indexes, 
+#         max_matches=no_of_motifs)
+#     return motif_distances, motif_indices, motif_subspaces, motif_mdls
 
 # ---- Generate Ground Truth ----
 def generate_caseid_list(df: pd.DataFrame, column = "caseid") -> list[int]:
@@ -951,3 +980,53 @@ def generate_caseid_list(df: pd.DataFrame, column = "caseid") -> list[int]:
         results.append((caseid, first_index, row_count))
 
     return results
+
+
+# ---- Clustering ----
+def cluster_motifs_with_word2vec(ui_log: pd.DataFrame, motif_starts: list[int], window_size: int) -> pd.DataFrame:
+    w2v_columns = [col for col in ui_log.columns if col.startswith("w2v_")]
+    
+    motif_vectors = []
+    for start in motif_starts:
+        window = ui_log.loc[start:start + window_size - 1, w2v_columns]
+        if len(window) < window_size:
+            continue
+        mean_vector = window.mean().values
+        motif_vectors.append((start, mean_vector))
+
+    starts = [entry[0] for entry in motif_vectors]
+    X = [entry[1] for entry in motif_vectors]
+    X_scaled = StandardScaler().fit_transform(X)
+
+    clustering = DBSCAN(eps=1.2, min_samples=2, metric='euclidean')
+    labels = clustering.fit_predict(X_scaled)
+
+    return pd.DataFrame({
+        "start_index": starts,
+        "routine_id": labels,
+        "embedding": X  # Keep for reuse in UMAP
+    })
+
+# ---- Plotting Function ----
+def plot_motif_clusters(df_clusters: pd.DataFrame):
+    X = np.vstack(df_clusters["embedding"].values)
+    
+    reducer = umap.UMAP(random_state=42)
+    X_umap = reducer.fit_transform(X)
+
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(
+        x=X_umap[:, 0],
+        y=X_umap[:, 1],
+        hue=df_clusters["routine_id"],
+        palette="tab10",
+        style=(df_clusters["routine_id"] == -1).map({True: "X", False: "o"}),
+        alpha=0.9,
+        s=80
+    )
+    plt.title("Discovered Motif Clusters (Word2Vec + HDBSCAN)")
+    plt.xlabel("HDBSCAN-1")
+    plt.ylabel("HDBSCAN-2")
+    plt.legend(title="Routine ID", bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.show()
