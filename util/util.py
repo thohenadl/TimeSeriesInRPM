@@ -1010,7 +1010,7 @@ def cluster_motifs_with_word2vec(ui_log: pd.DataFrame, motif_starts: list[int], 
 # ---- Plotting Function ----
 def plot_motif_clusters(df_clusters: pd.DataFrame):
     X = np.vstack(df_clusters["embedding"].values)
-    
+
     reducer = umap.UMAP(random_state=42)
     X_umap = reducer.fit_transform(X)
 
@@ -1025,10 +1025,10 @@ def plot_motif_clusters(df_clusters: pd.DataFrame):
         s=80,
         ax=ax
     )
-    ax.set_title("Discovered Motif Clusters (Word2Vec + HDBSCAN)")
-    ax.set_xlabel("HDBSCAN-1")
-    ax.set_ylabel("HDBSCAN-2")
-    ax.legend(title="Routine ID", bbox_to_anchor=(1.05, 1), loc='upper left')
+
+    ax.set_xlabel("Dimension 1")
+    ax.set_ylabel("Dimension 2")
+    ax.legend(title="Cluster ID", loc='best', frameon=True)
     fig.tight_layout()
 
     return fig
