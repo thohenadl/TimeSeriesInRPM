@@ -1014,7 +1014,7 @@ def plot_motif_clusters(df_clusters: pd.DataFrame):
     reducer = umap.UMAP(random_state=42)
     X_umap = reducer.fit_transform(X)
 
-    plt.figure(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(10, 6))
     sns.scatterplot(
         x=X_umap[:, 0],
         y=X_umap[:, 1],
@@ -1022,11 +1022,13 @@ def plot_motif_clusters(df_clusters: pd.DataFrame):
         palette="tab10",
         style=(df_clusters["routine_id"] == -1).map({True: "X", False: "o"}),
         alpha=0.9,
-        s=80
+        s=80,
+        ax=ax
     )
-    plt.title("Discovered Motif Clusters (Word2Vec + HDBSCAN)")
-    plt.xlabel("HDBSCAN-1")
-    plt.ylabel("HDBSCAN-2")
-    plt.legend(title="Routine ID", bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.tight_layout()
-    plt.show()
+    ax.set_title("Discovered Motif Clusters (Word2Vec + HDBSCAN)")
+    ax.set_xlabel("HDBSCAN-1")
+    ax.set_ylabel("HDBSCAN-2")
+    ax.legend(title="Routine ID", bbox_to_anchor=(1.05, 1), loc='upper left')
+    fig.tight_layout()
+
+    return fig
