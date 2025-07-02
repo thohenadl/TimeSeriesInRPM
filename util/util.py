@@ -4,8 +4,8 @@ import pandas as pd
 import os
 import random
 import numpy as np
-from scipy.sparse.linalg import eigsh
-from scipy.sparse import csr_matrix
+# from scipy.sparse.linalg import eigsh
+# from scipy.sparse import csr_matrix
 
 from gensim.models import Word2Vec
 from sklearn.preprocessing import LabelEncoder
@@ -45,144 +45,144 @@ def get_id(row, tuples, columns):
     except ValueError:
         return -1
     
-def encoding_UiLog(uiLog: pd.DataFrame, orderedColumnsList: list= ["category","application","concept:name"],
-                   encoding: int=1, cooccurance_distance: int=2, coocurance_combined: bool=True) -> pd.DataFrame:
-    '''
-    Method to encode the UILog based on the selected method. Default Method is continuous hot encoding.
-    Default assumption is to encode a SmartRPA generated UI log with the columns "category", "application", and "concept:name".
+# def encoding_UiLog(uiLog: pd.DataFrame, orderedColumnsList: list= ["category","application","concept:name"],
+#                    encoding: int=1, cooccurance_distance: int=2, coocurance_combined: bool=True) -> pd.DataFrame:
+#     '''
+#     Method to encode the UILog based on the selected method. Default Method is continuous hot encoding.
+#     Default assumption is to encode a SmartRPA generated UI log with the columns "category", "application", and "concept:name".
 
-    Parameters:
-      uiLog (pd.DataFrame): Dataframe containing the UI Log
-      orderedColumnsList (List / Default SmartRPA Columns): Ordered List of columns containing the attributes from the UI Log
-      encoding (Int / Default 1): Encoding Method to be used (1=Hierarchy Encoding, 2=Co-Occurrance Encoding, 3=Hot Encoding, 4= Column Based Hot Encoding)
-      cooccurance_distance (Int / Default 2): Distance to be considered for the co-occurrance matrix counting
-      coocurance_combined (Bool / Default True): If the columns for cooccurance should be combined into a single value
+#     Parameters:
+#       uiLog (pd.DataFrame): Dataframe containing the UI Log
+#       orderedColumnsList (List / Default SmartRPA Columns): Ordered List of columns containing the attributes from the UI Log
+#       encoding (Int / Default 1): Encoding Method to be used (1=Hierarchy Encoding, 2=Co-Occurrance Encoding, 3=Hot Encoding, 4= Column Based Hot Encoding)
+#       cooccurance_distance (Int / Default 2): Distance to be considered for the co-occurrance matrix counting
+#       coocurance_combined (Bool / Default True): If the columns for cooccurance should be combined into a single value
 
-    Returns:
-      Encoded UI log containing the column "tuple:id" as encoded value
-    '''
+#     Returns:
+#       Encoded UI log containing the column "tuple:id" as encoded value
+#     '''
 
-    if encoding == 1: # Hierarchy Encoding
-      # Get all Unique Combinations
-      uniqueDF = uiLog[orderedColumnsList].drop_duplicates()
-      # Group them based on hierarchy order
-      uniqueDF.groupby(by=orderedColumnsList,as_index=True,dropna=False)
-      uniqueDF.sort_values(by=orderedColumnsList,inplace=True,ignore_index=True)
-      uniqueDF = uniqueDF.reset_index(names='tuple:id')
-      # Merge DF based on SQL Statement
-      return pd.merge(uiLog,uniqueDF, how="left", on=orderedColumnsList)
+#     if encoding == 1: # Hierarchy Encoding
+#       # Get all Unique Combinations
+#       uniqueDF = uiLog[orderedColumnsList].drop_duplicates()
+#       # Group them based on hierarchy order
+#       uniqueDF.groupby(by=orderedColumnsList,as_index=True,dropna=False)
+#       uniqueDF.sort_values(by=orderedColumnsList,inplace=True,ignore_index=True)
+#       uniqueDF = uniqueDF.reset_index(names='tuple:id')
+#       # Merge DF based on SQL Statement
+#       return pd.merge(uiLog,uniqueDF, how="left", on=orderedColumnsList)
     
-    elif encoding == 2: # Co-Occurrance Encoding
-      result_df = uiLog.copy()
-      if coocurance_combined:
+#     elif encoding == 2: # Co-Occurrance Encoding
+#       result_df = uiLog.copy()
+#       if coocurance_combined:
 
-        # Create combined column in result_df
-        result_df['combined'] = result_df[orderedColumnsList].astype(str).agg('|'.join, axis=1)
+#         # Create combined column in result_df
+#         result_df['combined'] = result_df[orderedColumnsList].astype(str).agg('|'.join, axis=1)
         
-        # Create temporary df with combined column for co-occurrence calculation
-        temp_df = result_df.copy()
-        combined_matrix = co_occurrence_matrix_n(temp_df, cooccurance_distance, 'combined')
-        combined_ordered = spectral_ordering_cooccurrence(combined_matrix)
-        combined_dict = createDict(list(combined_ordered))
+#         # Create temporary df with combined column for co-occurrence calculation
+#         temp_df = result_df.copy()
+#         combined_matrix = co_occurrence_matrix_n(temp_df, cooccurance_distance, 'combined')
+#         combined_ordered = spectral_ordering_cooccurrence(combined_matrix)
+#         combined_dict = createDict(list(combined_ordered))
         
-        # Apply mapping to result_df using the existing combined column
-        result_df['tuple:id'] = result_df['combined'].map(lambda x: combined_dict.get(x))
+#         # Apply mapping to result_df using the existing combined column
+#         result_df['tuple:id'] = result_df['combined'].map(lambda x: combined_dict.get(x))
         
-        # Clean up temporary column
-        result_df = result_df.drop('combined', axis=1)
+#         # Clean up temporary column
+#         result_df = result_df.drop('combined', axis=1)
         
-      else:
-        # Does not function very well, looks like continuous hot encoding
-        # Process each column individually
-        # Process columns hierarchically
-        id_columns = []
-        ordering_columns = []
+#       else:
+#         # Does not function very well, looks like continuous hot encoding
+#         # Process each column individually
+#         # Process columns hierarchically
+#         id_columns = []
+#         ordering_columns = []
         
-        for col in orderedColumnsList:
-            # Calculate co-occurrence and ordering for this column
-            col_matrix = co_occurrence_matrix_n(uiLog, cooccurance_distance, col)
-            col_ordered = spectral_ordering_cooccurrence(col_matrix)
-            col_dict = createDict(list(col_ordered))
+#         for col in orderedColumnsList:
+#             # Calculate co-occurrence and ordering for this column
+#             col_matrix = co_occurrence_matrix_n(uiLog, cooccurance_distance, col)
+#             col_ordered = spectral_ordering_cooccurrence(col_matrix)
+#             col_dict = createDict(list(col_ordered))
             
-            # Add column IDs
-            id_col = f"{col}:id"
-            order_col = f"{col}:order"
+#             # Add column IDs
+#             id_col = f"{col}:id"
+#             order_col = f"{col}:order"
             
-            result_df[id_col] = result_df.apply(
-                lambda row: get_key(row, col_dict, col), axis=1)
-            result_df[order_col] = result_df[id_col].map(
-                {val: idx for idx, val in enumerate(sorted(result_df[id_col].unique()))})
+#             result_df[id_col] = result_df.apply(
+#                 lambda row: get_key(row, col_dict, col), axis=1)
+#             result_df[order_col] = result_df[id_col].map(
+#                 {val: idx for idx, val in enumerate(sorted(result_df[id_col].unique()))})
             
-            id_columns.append(id_col)
-            ordering_columns.append(order_col)
+#             id_columns.append(id_col)
+#             ordering_columns.append(order_col)
         
-          # Create hierarchical ordering
-        result_df['sequential_order'] = 0
-        multiplier = 1
+#           # Create hierarchical ordering
+#         result_df['sequential_order'] = 0
+#         multiplier = 1
         
-        for order_col in reversed(ordering_columns):
-            result_df['sequential_order'] += result_df[order_col] * multiplier
-            multiplier *= len(result_df[order_col].unique())
+#         for order_col in reversed(ordering_columns):
+#             result_df['sequential_order'] += result_df[order_col] * multiplier
+#             multiplier *= len(result_df[order_col].unique())
         
-        # Generate tuples preserving order
-        result_df = result_df.sort_values('sequential_order').reset_index(drop=True)
-        unique_df = result_df[id_columns].drop_duplicates(keep='first').reset_index(drop=True)
-        tuples = [tuple(row[id_columns]) for _, row in unique_df.iterrows()]
-        result_df['tuple:id'] = result_df.apply(
-            lambda row: get_id(row, tuples, columns=id_columns), axis=1)
+#         # Generate tuples preserving order
+#         result_df = result_df.sort_values('sequential_order').reset_index(drop=True)
+#         unique_df = result_df[id_columns].drop_duplicates(keep='first').reset_index(drop=True)
+#         tuples = [tuple(row[id_columns]) for _, row in unique_df.iterrows()]
+#         result_df['tuple:id'] = result_df.apply(
+#             lambda row: get_id(row, tuples, columns=id_columns), axis=1)
       
-      return result_df
+#       return result_df
     
-      # Old Code with hard coded columns
+#       # Old Code with hard coded columns
 
-      # Encode the application data by Cooccurance
-      # application_co_matrix = co_occurrence_matrix_n(uiLog, cooccurance_distance, "application")
-      # application_matrix = spectral_ordering_cooccurrence(application_co_matrix)
-      # applicationDict = createDict(list(application_matrix))
-      # # Encode the concept name (action) by Cooccurance
-      # concept_name_co_matrix = co_occurrence_matrix_n(uiLog, cooccurance_distance, "concept:name")
-      # concept_name_matrix = spectral_ordering_cooccurrence(concept_name_co_matrix)
-      # conceptNamesDict = createDict(list(concept_name_matrix))
-      # # Encode the categories with no special order as they are very few
-      # categoriesDict = createDict(set(uiLog.sort_values(by=['category'])['category'].unique()))
+#       # Encode the application data by Cooccurance
+#       # application_co_matrix = co_occurrence_matrix_n(uiLog, cooccurance_distance, "application")
+#       # application_matrix = spectral_ordering_cooccurrence(application_co_matrix)
+#       # applicationDict = createDict(list(application_matrix))
+#       # # Encode the concept name (action) by Cooccurance
+#       # concept_name_co_matrix = co_occurrence_matrix_n(uiLog, cooccurance_distance, "concept:name")
+#       # concept_name_matrix = spectral_ordering_cooccurrence(concept_name_co_matrix)
+#       # conceptNamesDict = createDict(list(concept_name_matrix))
+#       # # Encode the categories with no special order as they are very few
+#       # categoriesDict = createDict(set(uiLog.sort_values(by=['category'])['category'].unique()))
 
-      # uiLog['application:id'] = uiLog.apply(lambda row: get_key(row, applicationDict, 'application'), axis=1)
-      # uiLog['concept:name:id'] = uiLog.apply(lambda row: get_key(row, conceptNamesDict, 'concept:name'), axis=1)
-      # uiLog['category:id'] = uiLog.apply(lambda row: get_key(row, categoriesDict, 'category'), axis=1)
+#       # uiLog['application:id'] = uiLog.apply(lambda row: get_key(row, applicationDict, 'application'), axis=1)
+#       # uiLog['concept:name:id'] = uiLog.apply(lambda row: get_key(row, conceptNamesDict, 'concept:name'), axis=1)
+#       # uiLog['category:id'] = uiLog.apply(lambda row: get_key(row, categoriesDict, 'category'), axis=1)
 
-      # # Encode all ids into a single value for univariate discovery by using tuples
-      # numbersDF = uiLog[['concept:name:id', 'application:id', 'category:id']]
+#       # # Encode all ids into a single value for univariate discovery by using tuples
+#       # numbersDF = uiLog[['concept:name:id', 'application:id', 'category:id']]
 
-      # # Generate unique tuples for indexing the individual combinations of the rows mentioned
-      # unique_df = numbersDF.drop_duplicates(subset=numbersDF.columns, keep='first')
-      # tuples = [tuple(row[['concept:name:id', 'application:id', 'category:id']]) for i, row in unique_df.sort_values(by='application:id').iterrows()]
+#       # # Generate unique tuples for indexing the individual combinations of the rows mentioned
+#       # unique_df = numbersDF.drop_duplicates(subset=numbersDF.columns, keep='first')
+#       # tuples = [tuple(row[['concept:name:id', 'application:id', 'category:id']]) for i, row in unique_df.sort_values(by='application:id').iterrows()]
             
-      # uiLog['tuple:id'] = uiLog.apply(lambda row: get_id(row, tuples, columns=['concept:name:id','application:id', 'category:id']), axis=1)
+#       # uiLog['tuple:id'] = uiLog.apply(lambda row: get_id(row, tuples, columns=['concept:name:id','application:id', 'category:id']), axis=1)
     
-    elif encoding == 3: # Continuous String Hot Encoding
-      # Create a single combined column to represent the unique combination
-      combined = uiLog[orderedColumnsList].astype(str).agg('|'.join, axis=1)
+#     elif encoding == 3: # Continuous String Hot Encoding
+#       # Create a single combined column to represent the unique combination
+#       combined = uiLog[orderedColumnsList].astype(str).agg('|'.join, axis=1)
       
-      # Factorize the combined values to get unique IDs
-      uiLog['tuple:id'] = pd.factorize(combined)[0]
-      return uiLog
+#       # Factorize the combined values to get unique IDs
+#       uiLog['tuple:id'] = pd.factorize(combined)[0]
+#       return uiLog
     
-    elif encoding == 4: # Hot Encoding Using Column Label encoding first
-      # Encode each column using label encoding
-      encoded_cols = []
-      for col in orderedColumnsList:
-        le = LabelEncoder()
-        encoded_col_name = f"{col}_le"
-        uiLog[encoded_col_name] = le.fit_transform(uiLog[col].astype(str))
-        encoded_cols.append(encoded_col_name)
+#     elif encoding == 4: # Hot Encoding Using Column Label encoding first
+#       # Encode each column using label encoding
+#       encoded_cols = []
+#       for col in orderedColumnsList:
+#         le = LabelEncoder()
+#         encoded_col_name = f"{col}_le"
+#         uiLog[encoded_col_name] = le.fit_transform(uiLog[col].astype(str))
+#         encoded_cols.append(encoded_col_name)
 
-      # Factorize unique combinations of encoded columns
-      uiLog['tuple:id'] = pd.factorize(pd.Series([tuple(row) for row in uiLog[encoded_cols].values]))[0]
+#       # Factorize unique combinations of encoded columns
+#       uiLog['tuple:id'] = pd.factorize(pd.Series([tuple(row) for row in uiLog[encoded_cols].values]))[0]
 
-      return uiLog
+#       return uiLog
     
-    else:
-      raise ValueError("Encoding method not supported. Please select a valid encoding method.")
+#     else:
+#       raise ValueError("Encoding method not supported. Please select a valid encoding method.")
 
 
 
@@ -701,41 +701,41 @@ def co_occurrence_matrix_n(df: pd.DataFrame, n: int, coOccuranceCol: str):
   return co_matrix
 
 
-def spectral_ordering_cooccurrence(co_matrix):
-  """
-  Reorders a co-occurrence matrix using spectral ordering.
+# def spectral_ordering_cooccurrence(co_matrix):
+#   """
+#   Reorders a co-occurrence matrix using spectral ordering.
 
-  Args:
-      co_matrix (pd.DataFrame): The co-occurrence matrix.
+#   Args:
+#       co_matrix (pd.DataFrame): The co-occurrence matrix.
 
-  Returns:
-      pd.DataFrame: The reordered co-occurrence matrix.
-  """
-  # If there are issues with the ARPACK look here: https://docs.scipy.org/doc/scipy/tutorial/arpack.html
-  # Check if matrix is already sparse
-  if not isinstance(co_matrix, pd.SparseDtype):
-    # Convert dense matrix to sparse csr_matrix format
-    co_matrix_sparse = csr_matrix(co_matrix.values, dtype=float)
-  else:
-    # Use the existing sparse matrix
-    co_matrix_sparse = co_matrix
+#   Returns:
+#       pd.DataFrame: The reordered co-occurrence matrix.
+#   """
+#   # If there are issues with the ARPACK look here: https://docs.scipy.org/doc/scipy/tutorial/arpack.html
+#   # Check if matrix is already sparse
+#   if not isinstance(co_matrix, pd.SparseDtype):
+#     # Convert dense matrix to sparse csr_matrix format
+#     co_matrix_sparse = csr_matrix(co_matrix.values, dtype=float)
+#   else:
+#     # Use the existing sparse matrix
+#     co_matrix_sparse = co_matrix
 
-  # Calculate normalized Laplacian matrix
-  degree_matrix = np.diag(co_matrix_sparse.sum(axis=0))
-  laplacian_matrix = degree_matrix - co_matrix_sparse
+#   # Calculate normalized Laplacian matrix
+#   degree_matrix = np.diag(co_matrix_sparse.sum(axis=0))
+#   laplacian_matrix = degree_matrix - co_matrix_sparse
 
-  # Get the second smallest eigenvector (Fiedler vector)
-  _, eigenvectors = eigsh(laplacian_matrix, k=2, which='LM',  tol=1E-2)
-  fiedler_vector = eigenvectors[:, 1]
+#   # Get the second smallest eigenvector (Fiedler vector)
+#   _, eigenvectors = eigsh(laplacian_matrix, k=2, which='LM',  tol=1E-2)
+#   fiedler_vector = eigenvectors[:, 1]
 
-  # Sort indices based on Fiedler vector values
-  sorted_indices = fiedler_vector.argsort()
+#   # Sort indices based on Fiedler vector values
+#   sorted_indices = fiedler_vector.argsort()
 
-  # Reorder rows and columns based on sorted indices
-  reordered_matrix = co_matrix.iloc[sorted_indices, :]
-  reordered_matrix = reordered_matrix.iloc[:, sorted_indices]
+#   # Reorder rows and columns based on sorted indices
+#   reordered_matrix = co_matrix.iloc[sorted_indices, :]
+#   reordered_matrix = reordered_matrix.iloc[:, sorted_indices]
 
-  return reordered_matrix
+#   return reordered_matrix
 
 
 

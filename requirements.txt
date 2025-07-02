@@ -2,11 +2,8 @@ pm4py
 pandas
 stumpy
 numpy
-random
-scipy.sparse.linalg
-scipy.sparse
 gensim
-ast
-os
 matplotlib
 seaborn
+gensim
+scikit-learn
