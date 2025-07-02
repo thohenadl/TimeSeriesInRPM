@@ -14,7 +14,7 @@ import stumpy
 from stumpy import config
 import ast
 
-import umap
+import umap.umap_ as umap
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
 
