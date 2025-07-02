@@ -7,3 +7,4 @@ matplotlib
 seaborn
 gensim
 scikit-learn
+umap
